@@ -1,0 +1,76 @@
+version: '3.8'
+
+services:
+  php:
+    build:
+      context: ./backend
+      dockerfile: ./../.docker/backend/php/Dockerfile
+    image: php:8.1-fpm
+    container_name: lw_php
+    tty: true
+    working_dir: /var/www
+    restart: unless-stopped
+    environment:
+      SERVICE_NAME: backend
+      SERVICE_TAGS: dev
+    depends_on:
+      - postgres
+    links:
+      - postgres
+    volumes:
+      - ./backend:/var/www
+    networks:
+      lw-app-net:
+        ipv4_address: 172.40.0.4
+
+  nginx:
+    image: nginx:alpine
+    container_name: lw_nginx
+    restart: unless-stopped
+    ports:
+      - "8000:80"
+    depends_on:
+      - php
+    links:
+      - php
+    volumes:
+      - ./backend:/var/www
+      - ./.docker/backend/nginx/conf.d/app-development.conf:/etc/nginx/conf.d/default.conf
+    networks:
+      lw-app-net:
+        ipv4_address: 172.40.0.5
+
+  postgres:
+    image: postgres:alpine
+    container_name: lw_postgres
+    environment:
+      POSTGRES_DB: ${DB_DATABASE}
+      POSTGRES_USER: ${DB_USERNAME}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      PG_DATA: "/var/lib/postgresql/data/pgdata"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME} -d ${DB_PASSWORD}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+    networks:
+      lw-app-net:
+        ipv4_address: 172.40.0.7
+
+volumes:
+  pgdata:
+    driver: local
+
+networks:
+  lw-app-net:
+    driver: bridge
+    ipam:
+      driver: default
+      config:
+        - subnet: 172.40.0.0/16
